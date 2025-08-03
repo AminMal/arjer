@@ -1,4 +1,4 @@
-use super::token::Token;
+use super::Token;
 use crate::json::JsValue;
 use std::collections::HashMap;
 
