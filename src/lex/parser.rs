@@ -127,7 +127,7 @@ fn arr(it: &Vec<SubExpr>) -> Option<(usize, SubExpr)> {
     })
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<JsValue, String> {
+pub fn parse_tokens(tokens: Vec<Token>) -> Result<JsValue, String> {
     let mut subexprs = tokens
         .iter()
         .map(|t| match t {

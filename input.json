@@ -1,0 +1,19 @@
+{
+  "name": "Amin",
+  "age": 25,
+  "job": {
+    "title": "Programmer",
+    "self_employed": false
+  },
+  "dob": null,
+  "hobbies": [
+    "Music",
+    "Programming",
+    {
+      "title": "Sports"
+    },
+    2,
+    null,
+    true
+  ]
+}

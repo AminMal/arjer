@@ -69,6 +69,10 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
                 result = Some(Token::U32(number));
             }
             ',' | '}' | ']' => break,
+            ' ' | '\n' | '\t' => {
+                l.pop_front();
+                // Skip spaces
+            } 
             ch => {
                 return Err(format!("invalid char {}", ch));
             }
@@ -114,6 +118,10 @@ pub fn tokenize(s: String) -> Result<Vec<Token>, String> {
             ',' => {
                 chars.pop_front();
                 result.push(Token::Comma);
+            }
+            ' ' | '\n' | '\t' => {
+                // skip spaces which are not part of a string
+                chars.pop_front();
             }
             _ => {
                 let token = extract_head_value(&mut chars)?;
