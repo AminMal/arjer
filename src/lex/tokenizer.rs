@@ -1,3 +1,4 @@
+use crate::json::ast::Num;
 use crate::lex::token::Token;
 use std::collections::VecDeque;
 
@@ -57,22 +58,25 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
             }
             n if n.is_numeric() => {
                 l.pop_front();
-                let mut number = n.to_digit(10).unwrap();
+                let mut num_str = String::new();
+                num_str.push(n);
                 while let Some(&next_n) = l.front() {
-                    if next_n.is_numeric() {
+                    if next_n.is_numeric() || next_n == '.' {
                         l.pop_front();
-                        number = number * 10 + next_n.to_digit(10).unwrap();
+                        num_str.push(next_n);
                     } else {
                         break;
                     }
                 }
-                result = Some(Token::U32(number));
+                println!("num_str is {}", &num_str);
+                let num = Num::try_from(num_str)?;
+                result = Some(Token::N(num));
             }
             ',' | '}' | ']' => break,
             ' ' | '\n' | '\t' => {
                 l.pop_front();
                 // Skip spaces
-            } 
+            }
             ch => {
                 return Err(format!("invalid char {}", ch));
             }

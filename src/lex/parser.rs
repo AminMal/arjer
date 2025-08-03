@@ -133,7 +133,7 @@ pub fn parse_tokens(tokens: Vec<Token>) -> Result<JsValue, String> {
         .map(|t| match t {
             Token::Null => SubExpr::J(JsValue::JsNull),
             Token::Bool(b) => SubExpr::J(JsValue::JsBool(b.clone())),
-            Token::U32(u) => SubExpr::J(JsValue::JsNumber(u.clone())),
+            Token::N(num) => SubExpr::J(JsValue::JsNumber(num.clone())),
             _ => SubExpr::T(t.clone()),
         })
         .collect::<Vec<_>>();

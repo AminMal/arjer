@@ -1,3 +1,5 @@
+use crate::json::ast::Num;
+
 #[derive(Debug, Clone)]
 pub enum Token {
     OBracket,
@@ -8,7 +10,7 @@ pub enum Token {
     Comma,
     Colon,
     Str(String),
-    U32(u32),
+    N(Num),
     Bool(bool),
     Null,
 }
