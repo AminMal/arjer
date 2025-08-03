@@ -87,102 +87,107 @@ impl<'a> Cursor<'a> {
             other => (None, Some(format!("{:?} is not an object", other))),
         })
     }
-    
+
     pub fn string<S: Into<String>>(self, path: S) -> Result<String, String> {
         let p = path.into();
-        let result = self.map(|j| match j {
-            JsValue::JsObject(key_values) => Self::if_matches(
-                key_values.get(&p),
-                JsValue::is_str,
-                |inner| format!("{:?} is not a string", inner),
-                format!("no such element: {}", p),
-            ),
-            other => (None, Some(format!("{:?} is not an object", other))),
-        })
+        let result = self
+            .map(|j| match j {
+                JsValue::JsObject(key_values) => Self::if_matches(
+                    key_values.get(&p),
+                    JsValue::is_str,
+                    |inner| format!("{:?} is not a string", inner),
+                    format!("no such element: {}", p),
+                ),
+                other => (None, Some(format!("{:?} is not an object", other))),
+            })
             .get();
         match result {
             Ok(JsValue::JsString(s)) => Ok(s.clone()),
             Ok(other) => Err(format!("{:?} is not a string", other)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     pub fn boolean<S: Into<String>>(self, path: S) -> Result<bool, String> {
         let p = path.into();
-        let result = self.map(|j| match j {
-            JsValue::JsObject(key_values) => Self::if_matches(
-                key_values.get(&p),
-                JsValue::is_bool,
-                |inner| format!("{:?} is not a bool", inner),
-                format!("no such element: {}", p),
-            ),
-            other => (None, Some(format!("{:?} is not an object", other))),
-        })
+        let result = self
+            .map(|j| match j {
+                JsValue::JsObject(key_values) => Self::if_matches(
+                    key_values.get(&p),
+                    JsValue::is_bool,
+                    |inner| format!("{:?} is not a bool", inner),
+                    format!("no such element: {}", p),
+                ),
+                other => (None, Some(format!("{:?} is not an object", other))),
+            })
             .get();
         match result {
             Ok(JsValue::JsBool(b)) => Ok(b.clone()),
             Ok(other) => Err(format!("{:?} is not a bool", other)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     pub fn num_u32<S: Into<String>>(self, path: S) -> Result<u32, String> {
         let p = path.into();
-        let result = self.map(|j| match j {
-            JsValue::JsObject(key_values) => Self::if_matches(
-                key_values.get(&p),
-                JsValue::is_num_u32,
-                |inner| format!("{:?} is not a u32", inner),
-                format!("no such element: {}", p),
-            ),
-            other => (None, Some(format!("{:?} is not an object", other))),
-        })
+        let result = self
+            .map(|j| match j {
+                JsValue::JsObject(key_values) => Self::if_matches(
+                    key_values.get(&p),
+                    JsValue::is_num_u32,
+                    |inner| format!("{:?} is not a u32", inner),
+                    format!("no such element: {}", p),
+                ),
+                other => (None, Some(format!("{:?} is not an object", other))),
+            })
             .get();
         match result {
             Ok(JsValue::JsNumber(Num::U32(n))) => Ok(n.clone()),
             Ok(other) => Err(format!("{:?} is not a u32", other)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     pub fn num_u64<S: Into<String>>(self, path: S) -> Result<u64, String> {
         let p = path.into();
-        let result = self.map(|j| match j {
-            JsValue::JsObject(key_values) => Self::if_matches(
-                key_values.get(&p),
-                JsValue::is_num_u64,
-                |inner| format!("{:?} is not a u64", inner),
-                format!("no such element: {}", p),
-            ),
-            other => (None, Some(format!("{:?} is not an object", other))),
-        })
+        let result = self
+            .map(|j| match j {
+                JsValue::JsObject(key_values) => Self::if_matches(
+                    key_values.get(&p),
+                    JsValue::is_num_u64,
+                    |inner| format!("{:?} is not a u64", inner),
+                    format!("no such element: {}", p),
+                ),
+                other => (None, Some(format!("{:?} is not an object", other))),
+            })
             .get();
         match result {
             Ok(JsValue::JsNumber(Num::U64(n))) => Ok(n.clone()),
             Ok(other) => Err(format!("{:?} is not a u64", other)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     pub fn num_f64<S: Into<String>>(self, path: S) -> Result<f64, String> {
         let p = path.into();
-        let result = self.map(|j| match j {
-            JsValue::JsObject(key_values) => Self::if_matches(
-                key_values.get(&p),
-                JsValue::is_num_f64,
-                |inner| format!("{:?} is not a f64", inner),
-                format!("no such element: {}", p),
-            ),
-            other => (None, Some(format!("{:?} is not an object", other))),
-        })
+        let result = self
+            .map(|j| match j {
+                JsValue::JsObject(key_values) => Self::if_matches(
+                    key_values.get(&p),
+                    JsValue::is_num_f64,
+                    |inner| format!("{:?} is not a f64", inner),
+                    format!("no such element: {}", p),
+                ),
+                other => (None, Some(format!("{:?} is not an object", other))),
+            })
             .get();
         match result {
             Ok(JsValue::JsNumber(Num::F(n))) => Ok(n.clone()),
             Ok(other) => Err(format!("{:?} is not a f64", other)),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
-    
+
     pub fn get(self) -> Result<&'a JsValue, String> {
         match self {
             Self {
@@ -210,7 +215,7 @@ impl JsValue {
     pub fn is_array(&self) -> bool {
         matches!(self, JsValue::JsArray(_))
     }
-    
+
     pub fn is_str(&self) -> bool {
         matches!(self, JsValue::JsString(_))
     }

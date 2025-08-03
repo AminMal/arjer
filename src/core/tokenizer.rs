@@ -1,16 +1,15 @@
 use crate::core::Token;
+use crate::error::ParseError;
 use crate::json::ast::Num;
 use std::collections::VecDeque;
 
-fn extract_head_string(l: &mut VecDeque<char>) -> Result<String, String> {
+fn extract_head_string(l: &mut VecDeque<char>) -> Result<String, ParseError> {
     let mut result = String::new();
     while let Some(c) = l.pop_front() {
         match c {
             '"' => break,
             '\\' => {
-                let x = l
-                    .pop_front()
-                    .ok_or(String::from("expected escaped character"))?;
+                let x = l.pop_front().ok_or(ParseError::EOF)?;
                 result.push(x);
             }
             other => {
@@ -21,27 +20,34 @@ fn extract_head_string(l: &mut VecDeque<char>) -> Result<String, String> {
     Ok(result)
 }
 
-fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
-    let mut result = None;
+fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, ParseError> {
     while let Some(&c) = l.front() {
         match c {
             't' => {
                 let value_chars = l.drain(0..=3).collect::<Vec<_>>();
                 match value_chars[..] {
                     ['t', 'r', 'u', 'e'] => {
-                        result = Some(Token::Bool(true));
+                        return Ok(Token::Bool(true));
                     }
-                    _ => return Err(format!("expected `true`, got {:?}", value_chars)),
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec!["true".into()],
+                            got: value_chars.iter().collect(),
+                        });
+                    }
                 }
             }
             'f' => {
                 let value_chars = l.drain(0..=4).collect::<Vec<_>>();
                 match value_chars[..] {
                     ['f', 'a', 'l', 's', 'e'] => {
-                        result = Some(Token::Bool(false));
+                        return Ok(Token::Bool(false));
                     }
                     _ => {
-                        return Err(format!("expected `false`, got {:?}", value_chars));
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec!["false".into()],
+                            got: value_chars.iter().collect(),
+                        });
                     }
                 }
             }
@@ -49,10 +55,13 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
                 let value_chars = l.drain(0..=3).collect::<Vec<_>>();
                 match value_chars[..] {
                     ['n', 'u', 'l', 'l'] => {
-                        result = Some(Token::Null);
+                        return Ok(Token::Null);
                     }
                     _ => {
-                        return Err(format!("expected `null`, got {:?}", value_chars));
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec!["null".into()],
+                            got: value_chars.iter().collect(),
+                        });
                     }
                 }
             }
@@ -69,22 +78,20 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
                     }
                 }
                 let num = Num::try_from(num_str)?;
-                result = Some(Token::N(num));
-            }
-            ',' | '}' | ']' => break,
-            ' ' | '\n' | '\t' => {
-                l.pop_front();
-                // Skip spaces
+                return Ok(Token::N(num));
             }
             ch => {
-                return Err(format!("invalid char {}", ch));
+                return Err(ParseError::UnexpectedToken {
+                    expected: vec![],
+                    got: String::from(ch),
+                });
             }
         }
     }
-    result.ok_or("failed extracting head value".into())
+    Err(ParseError::EOF)
 }
 
-pub fn tokenize(s: String) -> Result<Vec<Token>, String> {
+pub fn tokenize(s: String) -> Result<Vec<Token>, ParseError> {
     let mut chars = s.chars().collect::<VecDeque<_>>();
     let mut result: Vec<Token> = vec![];
 

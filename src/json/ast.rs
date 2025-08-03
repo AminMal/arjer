@@ -1,3 +1,4 @@
+use crate::error::ParseError;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -10,23 +11,31 @@ pub enum Num {
 }
 
 impl TryFrom<String> for Num {
-    type Error = String;
+    type Error = ParseError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         if value.contains(".") {
             value
                 .parse::<f64>()
                 .map(|f| Self::F(f))
-                .map_err(|e| format!("{}", e))
+                .map_err(|_| ParseError::InvalidNumber {
+                    tpe: "f64".into(),
+                    value: value.clone(),
+                })
         } else {
             value
                 .parse::<u32>()
                 .map(|u| Self::U32(u))
-                .map_err(|e| format!("{}", e))
-                .or(value
-                    .parse::<u64>()
-                    .map(|u| Self::U64(u))
-                    .map_err(|e| format!("{}", e)))
+                .map_err(|_| ParseError::InvalidNumber {
+                    tpe: "u32".into(),
+                    value: value.clone(),
+                })
+                .or(value.parse::<u64>().map(|u| Self::U64(u)).map_err(|_| {
+                    ParseError::InvalidNumber {
+                        tpe: "u64".into(),
+                        value: value.clone(),
+                    }
+                }))
         }
     }
 }
