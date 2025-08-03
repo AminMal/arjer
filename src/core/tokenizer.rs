@@ -1,5 +1,5 @@
-use crate::json::ast::Num;
 use crate::core::Token;
+use crate::json::ast::Num;
 use std::collections::VecDeque;
 
 fn extract_head_string(l: &mut VecDeque<char>) -> Result<String, String> {

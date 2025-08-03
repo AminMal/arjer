@@ -1,5 +1,5 @@
-pub mod json;
 mod core;
+pub mod json;
 
 use crate::core::{parse_tokens, tokenize};
 use crate::json::JsValue;
