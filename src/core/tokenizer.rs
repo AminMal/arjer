@@ -1,5 +1,5 @@
 use crate::json::ast::Num;
-use crate::lex::token::Token;
+use crate::core::token::Token;
 use std::collections::VecDeque;
 
 fn extract_head_string(l: &mut VecDeque<char>) -> Result<String, String> {
@@ -68,7 +68,6 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, String> {
                         break;
                     }
                 }
-                println!("num_str is {}", &num_str);
                 let num = Num::try_from(num_str)?;
                 result = Some(Token::N(num));
             }
@@ -110,7 +109,7 @@ pub fn tokenize(s: String) -> Result<Vec<Token>, String> {
             '"' => {
                 chars.pop_front(); // " is popped
                 result.push(Token::DQuote);
-                // parse string
+                // core string
                 let string = extract_head_string(&mut chars)?;
                 result.push(Token::Str(string));
                 result.push(Token::DQuote);

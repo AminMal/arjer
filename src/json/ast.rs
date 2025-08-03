@@ -13,7 +13,6 @@ impl TryFrom<String> for Num {
     type Error = String;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        dbg!(&value);
         if value.contains(".") {
             value
                 .parse::<f64>()
