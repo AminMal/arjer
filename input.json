@@ -1,9 +1,12 @@
 {
-  "name": "Amin",
+  "name": "Amin the \"programmer\"",
   "age": 25,
   "job": {
     "title": "Programmer",
-    "self_employed": false
+    "self_employed": false,
+    "details": {
+      "info": "some info about my job"
+    }
   },
   "dob": null,
   "hobbies": [
