@@ -7,6 +7,6 @@ use crate::core::{parse_tokens, tokenize};
 use crate::error::ParseError;
 use crate::json::JsValue;
 
-pub fn parse<T: Into<String>>(t: T) -> Result<JsValue, ParseError> {
-    parse_tokens(tokenize(t.into())?)
+pub fn parse(t: &str) -> Result<JsValue, ParseError> {
+    parse_tokens(tokenize(t)?)
 }

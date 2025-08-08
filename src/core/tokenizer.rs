@@ -91,7 +91,7 @@ fn extract_head_value(l: &mut VecDeque<char>) -> Result<Token, ParseError> {
     Err(ParseError::EOF)
 }
 
-pub fn tokenize(s: String) -> Result<Vec<Token>, ParseError> {
+pub fn tokenize(s: &str) -> Result<Vec<Token>, ParseError> {
     let mut chars = s.chars().collect::<VecDeque<_>>();
     let mut result: Vec<Token> = vec![];
 
