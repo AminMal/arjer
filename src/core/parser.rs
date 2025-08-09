@@ -1,207 +1,268 @@
-use super::Token;
 use crate::error::ParseError;
-use crate::json::JsValue;
-use std::collections::HashMap;
+use crate::json::{JsValue, Num};
+use std::collections::{HashMap, VecDeque};
 
-#[derive(Clone, Debug)]
-enum SubExpr {
-    J(JsValue),
-    KV(String, JsValue),
-    KvSet(Vec<SubExpr>),
-    JArr(Vec<JsValue>),
-    S(String),
-    T(Token),
-}
-
-struct Replace {
-    starting_index: usize,
-    window_size: usize,
-    new_subexpr: SubExpr,
-}
-
-fn string_between_dquotes(it: &Vec<SubExpr>) -> Option<Replace> {
-    // windows of size 3 because we're looking for [", Str, "]
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::DQuote), SubExpr::T(Token::Str(s)), SubExpr::T(Token::DQuote)] =
-            slice
-        {
-            Some(Replace {
-                starting_index: index,
-                window_size: 3,
-                new_subexpr: SubExpr::S(s.clone()),
-            })
-        } else {
-            None
+fn parse_str(l: &mut VecDeque<char>) -> Result<String, ParseError> {
+    let mut result = String::new();
+    while let Some(c) = l.pop_front() {
+        match c {
+            '"' => break,
+            '\\' => {
+                let x = l.pop_front().ok_or(ParseError::EOF)?;
+                result.push(x);
+            }
+            other => {
+                result.push(other);
+            }
         }
-    })
+    }
+    Ok(result)
 }
 
-fn string_value(it: &Vec<SubExpr>) -> Option<Replace> {
-    // windows of size 2 because we're looking for [:, Str]
-    it.windows(2).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::Colon), SubExpr::S(s)] = slice {
-            // skip colon, hence index + 1
-            Some(Replace{ starting_index: index + 1, window_size: 1, new_subexpr: SubExpr::J(JsValue::JsString(s.clone())) })
-        } else if let [SubExpr::S(s), SubExpr::T(Token::Comma | Token::CCurlyBrace | Token::CBracket)] = slice {
-            Some(Replace{ starting_index: index, window_size: 1, new_subexpr: SubExpr::J(JsValue::JsString(s.clone())) })
-        } else {
-            None
+fn parse_value_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
+    let head = s.front().ok_or(ParseError::EOF)?;
+    match head {
+        't' => {
+            let value_chars = s.drain(0..=3).collect::<Vec<_>>();
+            match value_chars[..] {
+                ['t', 'r', 'u', 'e'] => Ok(JsValue::JsBool(true)),
+                _ => Err(ParseError::UnexpectedToken {
+                    expected: vec!["true".into()],
+                    got: value_chars.iter().collect(),
+                }),
+            }
         }
-    })
-}
-
-fn key_value(it: &Vec<SubExpr>) -> Option<Replace> {
-    // windows of size 3 because we're looking for [S, :, J]
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::S(s), SubExpr::T(Token::Colon), SubExpr::J(j)] = slice {
-            Some(Replace {
-                starting_index: index,
-                window_size: 3,
-                new_subexpr: SubExpr::KV(s.clone(), j.clone()),
-            })
-        } else {
-            None
+        'f' => {
+            let value_chars = s.drain(0..=4).collect::<Vec<_>>();
+            match value_chars[..] {
+                ['f', 'a', 'l', 's', 'e'] => Ok(JsValue::JsBool(false)),
+                _ => Err(ParseError::UnexpectedToken {
+                    expected: vec!["false".into()],
+                    got: value_chars.iter().collect(),
+                }),
+            }
         }
-    })
-}
-
-fn first_kv_in_obj(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(2).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::OCurlyBrace), kv @ SubExpr::KV(_, _)] = slice {
-            // skip OCurlyBrace, hence index + 1
-            Some(Replace {
-                starting_index: index + 1,
-                window_size: 1,
-                new_subexpr: SubExpr::KvSet(vec![kv.clone()]),
-            })
-        } else {
-            None
+        'n' => {
+            let value_chars = s.drain(0..=3).collect::<Vec<_>>();
+            match value_chars[..] {
+                ['n', 'u', 'l', 'l'] => Ok(JsValue::JsNull),
+                _ => Err(ParseError::UnexpectedToken {
+                    expected: vec!["null".into()],
+                    got: value_chars.iter().collect(),
+                }),
+            }
         }
-    })
-}
-
-fn kv_after_kvset(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::KvSet(key_values), SubExpr::T(Token::Comma), kv @ SubExpr::KV(_, _)] =
-            slice
-        {
-            let mut new_key_values = key_values.clone();
-            new_key_values.push(kv.clone());
-            Some(Replace {
-                starting_index: index,
-                window_size: 3,
-                new_subexpr: SubExpr::KvSet(new_key_values),
-            })
-        } else {
-            None
-        }
-    })
-}
-
-fn obj(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::OCurlyBrace), SubExpr::KvSet(kvs), SubExpr::T(Token::CCurlyBrace)] = slice {
-            let mut obj_map = HashMap::new();
-            kvs.iter().filter_map(|se| {
-                match se {
-                    SubExpr::KV(k, v) => Some((k, v)),
-                    _ => None
+        n if n.is_numeric() => {
+            let head = s.pop_front().unwrap();
+            let mut num_str = String::new();
+            num_str.push(head);
+            while let Some(&next_n) = s.front() {
+                if next_n.is_numeric() || next_n == '.' {
+                    s.pop_front();
+                    num_str.push(next_n);
+                } else {
+                    break;
                 }
-            }).for_each(|(k, v)| {obj_map.insert(k.clone(), v.clone()); });
-            Some(Replace{ starting_index: index, window_size: 3, new_subexpr: SubExpr::J(JsValue::JsObject(obj_map)) })
-        } else {
-            None
-        }
-    })
-}
-
-fn first_elem_jarr(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(2).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::OBracket), SubExpr::J(js)] = slice {
-            // skip OBracket, hence index + 1
-            Some(Replace {
-                starting_index: index + 1,
-                window_size: 1,
-                new_subexpr: SubExpr::JArr(vec![js.clone()]),
-            })
-        } else {
-            None
-        }
-    })
-}
-
-fn jsvalue_after_jarr(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::JArr(jarr), SubExpr::T(Token::Comma), SubExpr::J(j)] = slice {
-            let mut new_jarr = jarr.clone();
-            new_jarr.push(j.clone());
-            Some(Replace {
-                starting_index: index,
-                window_size: 3,
-                new_subexpr: SubExpr::JArr(new_jarr),
-            })
-        } else {
-            None
-        }
-    })
-}
-
-fn arr(it: &Vec<SubExpr>) -> Option<Replace> {
-    it.windows(3).enumerate().find_map(|(index, slice)| {
-        if let [SubExpr::T(Token::OBracket), SubExpr::JArr(jarr), SubExpr::T(Token::CBracket)] =
-            slice
-        {
-            Some(Replace {
-                starting_index: index,
-                window_size: 3,
-                new_subexpr: SubExpr::J(JsValue::JsArray(jarr.clone())),
-            })
-        } else {
-            None
-        }
-    })
-}
-
-const RULES: [fn(&Vec<SubExpr>) -> Option<Replace>; 9] = [
-    string_between_dquotes,
-    string_value,
-    key_value,
-    first_kv_in_obj,
-    kv_after_kvset,
-    obj,
-    first_elem_jarr,
-    jsvalue_after_jarr,
-    arr
-];
-
-pub fn parse_tokens(tokens: Vec<Token>) -> Result<JsValue, ParseError> {
-    let mut subexprs = tokens
-        .iter()
-        .map(|t| match t {
-            Token::Null => SubExpr::J(JsValue::JsNull),
-            Token::Bool(b) => SubExpr::J(JsValue::JsBool(b.clone())),
-            Token::N(num) => SubExpr::J(JsValue::JsNumber(num.clone())),
-            _ => SubExpr::T(t.clone()),
-        })
-        .collect::<Vec<_>>();
-
-    while !matches!(&subexprs[..], &[SubExpr::J(_)]) {
-        match RULES.iter().find_map(|f| f(&subexprs)) {
-            Some(Replace {
-                starting_index,
-                window_size,
-                new_subexpr,
-            }) => {
-                _ = subexprs.splice(starting_index..starting_index + window_size, [new_subexpr]);
             }
-            _ => {
-                break;
+            let num = Num::try_from(num_str)?;
+            Ok(JsValue::JsNumber(num))
+        }
+        '"' => {
+            _ = s.pop_front();
+            Ok(JsValue::JsString(parse_str(s)?))
+        }
+        '{' => parse_obj_v2(s),
+        '[' => parse_arr_v2(s),
+        ' ' | '\t' | '\n' => {
+            _ = s.pop_front();
+            parse_value_v2(s)
+        }
+        _ => Err(ParseError::UnexpectedToken {
+            expected: vec![],
+            got: String::from(head.clone()),
+        }),
+    }
+}
+
+enum ObjectParseState {
+    ExpectingKey,
+    ExpectingKeyOrEndOfObject,
+    ExpectingCommaOrEndOfObject,
+    ExpectingColon,
+    ExpectingValue,
+}
+
+fn parse_obj_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
+    _ = s.pop_front(); // pop open curly brace
+    let mut state: ObjectParseState = ObjectParseState::ExpectingKeyOrEndOfObject;
+    let mut key_values: HashMap<String, JsValue> = HashMap::new();
+    let mut latest_key: Option<String> = None;
+
+    loop {
+        let next = s.front().ok_or(ParseError::EOF)?;
+        match state {
+            ObjectParseState::ExpectingKey => {
+                match next {
+                    '"' => {
+                        _ = s.pop_front(); // pop "
+                        latest_key = Some(parse_str(s)?);
+                        state = ObjectParseState::ExpectingColon;
+                    }
+                    ' ' | '\t' | '\n' => {
+                        _ = s.pop_front(); // ignore whitespaces here
+                    }
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec![String::from("\"")],
+                            got: String::from(next.clone()),
+                        });
+                    }
+                }
+            }
+            ObjectParseState::ExpectingKeyOrEndOfObject => {
+                match next {
+                    '}' => {
+                        _ = s.pop_front();
+                        break;
+                    }
+                    '"' => {
+                        _ = s.pop_front(); // pop "
+                        latest_key = Some(parse_str(s)?);
+                        state = ObjectParseState::ExpectingColon;
+                    }
+                    ' ' | '\t' | '\n' => {
+                        _ = s.pop_front(); // ignore whitespaces here
+                    }
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec![String::from("\""), String::from("}")],
+                            got: String::from(next.clone()),
+                        });
+                    }
+                }
+            }
+            ObjectParseState::ExpectingCommaOrEndOfObject => {
+                match next {
+                    '}' => {
+                        _ = s.pop_front();
+                        break;
+                    }
+                    ',' => {
+                        _ = s.pop_front();
+                        state = ObjectParseState::ExpectingKey;
+                    }
+                    ' ' | '\t' | '\n' => {
+                        _ = s.pop_front(); // ignore whitespaces here
+                    }
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec![String::from(","), String::from("}")],
+                            got: String::from(next.clone()),
+                        });
+                    }
+                }
+            }
+            ObjectParseState::ExpectingColon => {
+                match next {
+                    ':' => {
+                        _ = s.pop_front();
+                        state = ObjectParseState::ExpectingValue;
+                    }
+                    ' ' | '\t' | '\n' => {
+                        _ = s.pop_front(); // ignore whitespaces here
+                    }
+                    _ => {
+                        return Err(ParseError::UnexpectedToken {
+                            expected: vec![String::from(":")],
+                            got: String::from(next.clone()),
+                        });
+                    }
+                }
+            }
+            ObjectParseState::ExpectingValue => {
+                match next {
+                    ' ' | '\t' | '\n' => {
+                        _ = s.pop_front(); // ignore whitespaces here
+                    }
+                    _ => {
+                        let value = parse_value_v2(s)?;
+                        match &latest_key {
+                            Some(key) => {
+                                key_values.insert(key.clone(), value);
+                            }
+                            _ => {
+                                return Err(ParseError::InvalidJsonStructure);
+                            }
+                        }
+                        latest_key = None;
+                        state = ObjectParseState::ExpectingCommaOrEndOfObject;
+                    }
+                }
             }
         }
     }
-    if let [SubExpr::J(js)] = &subexprs[..] {
-        Ok(js.clone())
-    } else {
-        Err(ParseError::InvalidJsonStructure)
+    Ok(JsValue::JsObject(key_values))
+}
+
+enum ArrParseState {
+    ExpectingValue,
+    ExpectingValueOrEndOfArray,
+    ExpectingCommaOrEndOfArray,
+}
+fn parse_arr_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
+    let mut values: Vec<JsValue> = vec![];
+    let mut state: ArrParseState = ArrParseState::ExpectingValueOrEndOfArray;
+    _ = s.pop_front(); // pop [
+    loop {
+        let head = s.front().map(char::clone).ok_or(ParseError::EOF)?;
+        match state {
+            ArrParseState::ExpectingValueOrEndOfArray => match head {
+                ']' => {
+                    _ = s.pop_front();
+                    break;
+                }
+                ' ' | '\t' | '\n' => {
+                    _ = s.pop_front();
+                }
+                _ => {
+                    values.push(parse_value_v2(s)?);
+                    state = ArrParseState::ExpectingCommaOrEndOfArray;
+                }
+            },
+            ArrParseState::ExpectingCommaOrEndOfArray => match head {
+                ']' => {
+                    _ = s.pop_front();
+                    break;
+                }
+                ' ' | '\t' | '\n' => {
+                    _ = s.pop_front();
+                }
+                ',' => {
+                    _ = s.pop_front();
+                    state = ArrParseState::ExpectingValue;
+                }
+                _ => {
+                    return Err(ParseError::UnexpectedToken {
+                        expected: vec![String::from(","), String::from("]")],
+                        got: String::from(head.clone()),
+                    });
+                }
+            },
+            ArrParseState::ExpectingValue => match head {
+                ' ' | '\t' | '\n' => {
+                    _ = s.pop_front();
+                }
+                _ => {
+                    values.push(parse_value_v2(s)?);
+                    state = ArrParseState::ExpectingCommaOrEndOfArray;
+                }
+            },
+        }
     }
+    Ok(JsValue::JsArray(values))
+}
+
+pub fn parse_raw(s: &str) -> Result<JsValue, ParseError> {
+    let mut chars = s.chars().collect::<VecDeque<char>>();
+    parse_value_v2(&mut chars)
 }
