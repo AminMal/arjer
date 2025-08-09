@@ -235,4 +235,49 @@ impl JsValue {
     pub fn is_num_f64(&self) -> bool {
         matches!(self, JsValue::JsNumber(Num::F(_)))
     }
+
+    fn indent_impl(&self, s: &str, level: usize) -> String {
+        let space_inner = s.repeat(level);
+        let space_outer = s.repeat(level - 1);
+        match self {
+            JsValue::JsNull => String::from("null"),
+            JsValue::JsString(s) => format!("\"{}\"", s),
+            JsValue::JsNumber(Num::U32(u)) => u.to_string(),
+            JsValue::JsNumber(Num::U64(u)) => u.to_string(),
+            JsValue::JsNumber(Num::F(f)) => f.to_string(),
+            JsValue::JsBool(b) => b.to_string(),
+            JsValue::JsObject(obj) => {
+                if obj.is_empty() {
+                    String::from("{}")
+                } else {
+                    let inner = obj
+                        .iter()
+                        .map(|(k, v)| format!("\n{}\"{}\": {}", space_inner, k, v.indent_impl(s, level + 1)))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("{}{}\n{}{}", "{", inner, space_outer, "}")       
+                }
+            }
+            JsValue::JsArray(arr) => {
+                if arr.is_empty() {
+                    String::from("[]")
+                } else {
+                    let inner = arr
+                        .iter()
+                        .map(|v| format!("\n{}{}", space_inner, v.indent_impl(s, level + 1)))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("[{}\n{}]", inner, space_outer)       
+                }
+            }
+        }
+    }
+
+    pub fn pretty_print(&self) -> String {
+        self.indent_impl("  ", 1)
+    }
+    
+    pub fn indent(&self, space: &str) -> String {
+        self.indent_impl(space, 1)
+    }
 }

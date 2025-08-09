@@ -7,8 +7,9 @@ fn main() {
     let json = arjer::parse(input.as_str()).unwrap();
     let end = Instant::now();
     let dur = end.duration_since(start);
-    dbg!(&json);
-    println!("It took {:?} to core", dur);
+    println!("{}", json.pretty_print());
+    println!("{}", json.indent("\t"));
+    println!("It took {:?} to parse json file", dur);
     // println!("----------");
     // let job_title = json.cursor().obj("job").string("title").unwrap();
     // println!("job title is {}", job_title);
