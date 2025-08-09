@@ -1,65 +1,68 @@
+use crate::core::strit::StrIt;
 use crate::error::ParseError;
 use crate::json::{JsValue, Num};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
-fn parse_str(l: &mut VecDeque<char>) -> Result<String, ParseError> {
+fn parse_str(i: &mut StrIt) -> Result<String, ParseError> {
     let mut result = String::new();
-    while let Some(c) = l.pop_front() {
+    while let Some(c) = i.pop() {
         match c {
-            '"' => break,
-            '\\' => {
-                let x = l.pop_front().ok_or(ParseError::EOF)?;
-                result.push(x);
+            b'"' => break,
+            b'\\' => {
+                let x = i.pop().ok_or(ParseError::EOF)?;
+                result.push(x as char);
             }
             other => {
-                result.push(other);
+                result.push(other as char);
             }
         }
     }
     Ok(result)
 }
 
-fn parse_value_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
-    let head = s.front().ok_or(ParseError::EOF)?;
+fn parse_value(i: &mut StrIt) -> Result<JsValue, ParseError> {
+    let head = i.peek().ok_or(ParseError::EOF)?;
     match head {
-        't' => {
-            let value_chars = s.drain(0..=3).collect::<Vec<_>>();
-            match value_chars[..] {
-                ['t', 'r', 'u', 'e'] => Ok(JsValue::JsBool(true)),
-                _ => Err(ParseError::UnexpectedToken {
+        b't' => {
+            if i.starts_with(&[b't', b'r', b'u', b'e']) {
+                i.shift(4);
+                Ok(JsValue::JsBool(true))
+            } else {
+                Err(ParseError::UnexpectedToken {
                     expected: vec!["true".into()],
-                    got: value_chars.iter().collect(),
-                }),
+                    got: i.peek_n(4),
+                })
             }
         }
-        'f' => {
-            let value_chars = s.drain(0..=4).collect::<Vec<_>>();
-            match value_chars[..] {
-                ['f', 'a', 'l', 's', 'e'] => Ok(JsValue::JsBool(false)),
-                _ => Err(ParseError::UnexpectedToken {
+        b'f' => {
+            if i.starts_with(&[b'f', b'a', b'l', b's', b'e']) {
+                i.shift(5);
+                Ok(JsValue::JsBool(false))
+            } else {
+                Err(ParseError::UnexpectedToken {
                     expected: vec!["false".into()],
-                    got: value_chars.iter().collect(),
-                }),
+                    got: i.peek_n(5),
+                })
             }
         }
-        'n' => {
-            let value_chars = s.drain(0..=3).collect::<Vec<_>>();
-            match value_chars[..] {
-                ['n', 'u', 'l', 'l'] => Ok(JsValue::JsNull),
-                _ => Err(ParseError::UnexpectedToken {
+        b'n' => {
+            if i.starts_with(&[b'n', b'u', b'l', b'l']) {
+                i.shift(4);
+                Ok(JsValue::JsNull)
+            } else {
+                Err(ParseError::UnexpectedToken {
                     expected: vec!["null".into()],
-                    got: value_chars.iter().collect(),
-                }),
+                    got: i.peek_n(4),
+                })
             }
         }
-        n if n.is_numeric() => {
-            let head = s.pop_front().unwrap();
-            let mut num_str = String::new();
-            num_str.push(head);
-            while let Some(&next_n) = s.front() {
-                if next_n.is_numeric() || next_n == '.' {
-                    s.pop_front();
-                    num_str.push(next_n);
+        n if (*n as char).is_numeric() => {
+            let head = i.pop().unwrap();
+            let mut num_str = String::from(head as char);
+            while let Some(&next_n) = i.peek() {
+                if (next_n as char).is_numeric() || (next_n as char) == '.' {
+                    i.pop();
+                    num_str.push(next_n as char);
                 } else {
                     break;
                 }
@@ -67,19 +70,19 @@ fn parse_value_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
             let num = Num::try_from(num_str)?;
             Ok(JsValue::JsNumber(num))
         }
-        '"' => {
-            _ = s.pop_front();
-            Ok(JsValue::JsString(parse_str(s)?))
+        b'"' => {
+            _ = i.pop();
+            Ok(JsValue::JsString(parse_str(i)?))
         }
-        '{' => parse_obj_v2(s),
-        '[' => parse_arr_v2(s),
-        ' ' | '\t' | '\n' => {
-            _ = s.pop_front();
-            parse_value_v2(s)
+        b'{' => parse_obj(i),
+        b'[' => parse_arr(i),
+        b' ' | b'\t' | b'\n' => {
+            _ = i.pop();
+            parse_value(i)
         }
         _ => Err(ParseError::UnexpectedToken {
             expected: vec![],
-            got: String::from(head.clone()),
+            got: String::from(*head as char),
         }),
     }
 }
@@ -92,100 +95,100 @@ enum ObjectParseState {
     ExpectingValue,
 }
 
-fn parse_obj_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
-    _ = s.pop_front(); // pop open curly brace
+fn parse_obj(i: &mut StrIt) -> Result<JsValue, ParseError> {
+    _ = i.pop(); // pop open curly brace
     let mut state: ObjectParseState = ObjectParseState::ExpectingKeyOrEndOfObject;
     let mut key_values: HashMap<String, JsValue> = HashMap::new();
     let mut latest_key: Option<String> = None;
 
     loop {
-        let next = s.front().ok_or(ParseError::EOF)?;
+        let next = i.peek().ok_or(ParseError::EOF)?;
         match state {
             ObjectParseState::ExpectingKey => {
                 match next {
-                    '"' => {
-                        _ = s.pop_front(); // pop "
-                        latest_key = Some(parse_str(s)?);
+                    b'"' => {
+                        _ = i.pop(); // pop "
+                        latest_key = Some(parse_str(i)?);
                         state = ObjectParseState::ExpectingColon;
                     }
-                    ' ' | '\t' | '\n' => {
-                        _ = s.pop_front(); // ignore whitespaces here
+                    b' ' | b'\t' | b'\n' => {
+                        _ = i.pop(); // ignore whitespaces here
                     }
                     _ => {
                         return Err(ParseError::UnexpectedToken {
                             expected: vec![String::from("\"")],
-                            got: String::from(next.clone()),
+                            got: String::from(*next as char),
                         });
                     }
                 }
             }
             ObjectParseState::ExpectingKeyOrEndOfObject => {
                 match next {
-                    '}' => {
-                        _ = s.pop_front();
+                    b'}' => {
+                        _ = i.pop();
                         break;
                     }
-                    '"' => {
-                        _ = s.pop_front(); // pop "
-                        latest_key = Some(parse_str(s)?);
+                    b'"' => {
+                        _ = i.pop(); // pop "
+                        latest_key = Some(parse_str(i)?);
                         state = ObjectParseState::ExpectingColon;
                     }
-                    ' ' | '\t' | '\n' => {
-                        _ = s.pop_front(); // ignore whitespaces here
+                    b' ' | b'\t' | b'\n' => {
+                        _ = i.pop(); // ignore whitespaces here
                     }
                     _ => {
                         return Err(ParseError::UnexpectedToken {
                             expected: vec![String::from("\""), String::from("}")],
-                            got: String::from(next.clone()),
+                            got: String::from(*next as char),
                         });
                     }
                 }
             }
             ObjectParseState::ExpectingCommaOrEndOfObject => {
                 match next {
-                    '}' => {
-                        _ = s.pop_front();
+                    b'}' => {
+                        _ = i.pop();
                         break;
                     }
-                    ',' => {
-                        _ = s.pop_front();
+                    b',' => {
+                        _ = i.pop();
                         state = ObjectParseState::ExpectingKey;
                     }
-                    ' ' | '\t' | '\n' => {
-                        _ = s.pop_front(); // ignore whitespaces here
+                    b' ' | b'\t' | b'\n' => {
+                        _ = i.pop(); // ignore whitespaces here
                     }
                     _ => {
                         return Err(ParseError::UnexpectedToken {
                             expected: vec![String::from(","), String::from("}")],
-                            got: String::from(next.clone()),
+                            got: String::from(*next as char),
                         });
                     }
                 }
             }
             ObjectParseState::ExpectingColon => {
                 match next {
-                    ':' => {
-                        _ = s.pop_front();
+                    b':' => {
+                        _ = i.pop();
                         state = ObjectParseState::ExpectingValue;
                     }
-                    ' ' | '\t' | '\n' => {
-                        _ = s.pop_front(); // ignore whitespaces here
+                    b' ' | b'\t' | b'\n' => {
+                        _ = i.pop(); // ignore whitespaces here
                     }
                     _ => {
                         return Err(ParseError::UnexpectedToken {
                             expected: vec![String::from(":")],
-                            got: String::from(next.clone()),
+                            got: String::from(*next as char),
                         });
                     }
                 }
             }
             ObjectParseState::ExpectingValue => {
                 match next {
-                    ' ' | '\t' | '\n' => {
-                        _ = s.pop_front(); // ignore whitespaces here
+                    b' ' | b'\t' | b'\n' => {
+                        _ = i.pop(); // ignore whitespaces here
                     }
                     _ => {
-                        let value = parse_value_v2(s)?;
+                        let value = parse_value(i)?;
                         match &latest_key {
                             Some(key) => {
                                 key_values.insert(key.clone(), value);
@@ -209,51 +212,52 @@ enum ArrParseState {
     ExpectingValueOrEndOfArray,
     ExpectingCommaOrEndOfArray,
 }
-fn parse_arr_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
+
+fn parse_arr(i: &mut StrIt) -> Result<JsValue, ParseError> {
     let mut values: Vec<JsValue> = vec![];
     let mut state: ArrParseState = ArrParseState::ExpectingValueOrEndOfArray;
-    _ = s.pop_front(); // pop [
+    _ = i.pop(); // pop [
     loop {
-        let head = s.front().map(char::clone).ok_or(ParseError::EOF)?;
+        let head = i.peek().copied().ok_or(ParseError::EOF)?;
         match state {
             ArrParseState::ExpectingValueOrEndOfArray => match head {
-                ']' => {
-                    _ = s.pop_front();
+                b']' => {
+                    _ = i.pop();
                     break;
                 }
-                ' ' | '\t' | '\n' => {
-                    _ = s.pop_front();
+                b' ' | b'\t' | b'\n' => {
+                    _ = i.pop();
                 }
                 _ => {
-                    values.push(parse_value_v2(s)?);
+                    values.push(parse_value(i)?);
                     state = ArrParseState::ExpectingCommaOrEndOfArray;
                 }
             },
             ArrParseState::ExpectingCommaOrEndOfArray => match head {
-                ']' => {
-                    _ = s.pop_front();
+                b']' => {
+                    _ = i.pop();
                     break;
                 }
-                ' ' | '\t' | '\n' => {
-                    _ = s.pop_front();
+                b' ' | b'\t' | b'\n' => {
+                    _ = i.pop();
                 }
-                ',' => {
-                    _ = s.pop_front();
+                b',' => {
+                    _ = i.pop();
                     state = ArrParseState::ExpectingValue;
                 }
                 _ => {
                     return Err(ParseError::UnexpectedToken {
                         expected: vec![String::from(","), String::from("]")],
-                        got: String::from(head.clone()),
+                        got: String::from(head as char),
                     });
                 }
             },
             ArrParseState::ExpectingValue => match head {
-                ' ' | '\t' | '\n' => {
-                    _ = s.pop_front();
+                b' ' | b'\t' | b'\n' => {
+                    _ = i.pop();
                 }
                 _ => {
-                    values.push(parse_value_v2(s)?);
+                    values.push(parse_value(i)?);
                     state = ArrParseState::ExpectingCommaOrEndOfArray;
                 }
             },
@@ -263,6 +267,9 @@ fn parse_arr_v2(s: &mut VecDeque<char>) -> Result<JsValue, ParseError> {
 }
 
 pub fn parse_raw(s: &str) -> Result<JsValue, ParseError> {
-    let mut chars = s.chars().collect::<VecDeque<char>>();
-    parse_value_v2(&mut chars)
+    let mut it = StrIt {
+        s: s.as_bytes(),
+        pos: 0,
+    };
+    parse_value(&mut it)
 }

@@ -252,10 +252,17 @@ impl JsValue {
                 } else {
                     let inner = obj
                         .iter()
-                        .map(|(k, v)| format!("\n{}\"{}\": {}", space_inner, k, v.indent_impl(s, level + 1)))
+                        .map(|(k, v)| {
+                            format!(
+                                "\n{}\"{}\": {}",
+                                space_inner,
+                                k,
+                                v.indent_impl(s, level + 1)
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join(",");
-                    format!("{}{}\n{}{}", "{", inner, space_outer, "}")       
+                    format!("{}{}\n{}{}", "{", inner, space_outer, "}")
                 }
             }
             JsValue::JsArray(arr) => {
@@ -267,7 +274,7 @@ impl JsValue {
                         .map(|v| format!("\n{}{}", space_inner, v.indent_impl(s, level + 1)))
                         .collect::<Vec<_>>()
                         .join(",");
-                    format!("[{}\n{}]", inner, space_outer)       
+                    format!("[{}\n{}]", inner, space_outer)
                 }
             }
         }
@@ -276,7 +283,7 @@ impl JsValue {
     pub fn pretty_print(&self) -> String {
         self.indent_impl("  ", 1)
     }
-    
+
     pub fn indent(&self, space: &str) -> String {
         self.indent_impl(space, 1)
     }

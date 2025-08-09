@@ -8,7 +8,6 @@ fn main() {
     let end = Instant::now();
     let dur = end.duration_since(start);
     println!("{}", json.pretty_print());
-    println!("{}", json.indent("\t"));
     println!("It took {:?} to parse json file", dur);
     // println!("----------");
     // let job_title = json.cursor().obj("job").string("title").unwrap();
