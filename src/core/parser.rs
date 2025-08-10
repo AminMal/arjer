@@ -4,20 +4,20 @@ use crate::json::{JsValue, Num};
 use std::collections::HashMap;
 
 fn parse_str(i: &mut StrIt) -> Result<String, ParseError> {
-    let mut result = String::new();
+    let start_pos = i.pos;
     while let Some(c) = i.pop() {
         match c {
             b'"' => break,
             b'\\' => {
-                let x = i.pop().ok_or(ParseError::EOF)?;
-                result.push(x as char);
+                _ = i.pop(); // pop next
             }
-            other => {
-                result.push(other as char);
-            }
+            _ => {} // just pop the head (which is already done
         }
     }
-    Ok(result)
+    let end_pos = i.pos-1; // don't append ending double quote to the string
+    unsafe {
+        Ok(String::from_utf8_unchecked(i.s[start_pos..end_pos].to_vec()))
+    }
 }
 
 fn parse_value(i: &mut StrIt) -> Result<JsValue, ParseError> {
@@ -56,19 +56,22 @@ fn parse_value(i: &mut StrIt) -> Result<JsValue, ParseError> {
                 })
             }
         }
-        n if (*n as char).is_numeric() => {
-            let head = i.pop().unwrap();
-            let mut num_str = String::from(head as char);
+        n if n.is_ascii_digit() => {
+            let start_pos = i.pos;
+            _ = i.pop();
             while let Some(&next_n) = i.peek() {
-                if (next_n as char).is_numeric() || (next_n as char) == '.' {
+                if next_n.is_ascii_digit() || next_n == b'.' {
                     i.pop();
-                    num_str.push(next_n as char);
                 } else {
                     break;
                 }
             }
-            let num = Num::try_from(num_str)?;
-            Ok(JsValue::JsNumber(num))
+            let end_pos = i.pos;
+            unsafe {
+                let num_str = String::from_utf8_unchecked(i.s[start_pos..end_pos].to_vec());
+                let num = Num::try_from(num_str)?;
+                Ok(JsValue::JsNumber(num))
+            }
         }
         b'"' => {
             _ = i.pop();

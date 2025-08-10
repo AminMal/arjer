@@ -4,6 +4,7 @@ pub(super) struct StrIt<'a> {
 }
 
 impl<'a> StrIt<'a> {
+    #[inline(always)]
     pub fn peek(&self) -> Option<&u8> {
         self.s.get(self.pos)
     }
@@ -14,10 +15,12 @@ impl<'a> StrIt<'a> {
         Some(c)
     }
 
+    #[inline(always)]
     pub fn starts_with(&self, cs: &[u8]) -> bool {
         self.s[self.pos..].starts_with(cs)
     }
 
+    #[inline(always)]
     pub fn shift(&mut self, n: usize) {
         self.pos += n;
     }
